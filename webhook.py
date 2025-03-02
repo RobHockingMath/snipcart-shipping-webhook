@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # 🔹 Replace with your Easyship Access Token
-EASYSHIP_ACCESS_TOKEN = "your_access_token_here"
+EASYSHIP_ACCESS_TOKEN = "prod_pIQhZNB1f/1bxFy9+DzhBA6HzcBskRNogjeKXV7gWq0="
 
 @app.route("/snipcart-webhook", methods=["POST"])
 def snipcart_webhook():
