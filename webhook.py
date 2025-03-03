@@ -13,7 +13,7 @@ def snipcart_webhook():
         order_data = request.json.get("content")
         if not order_data:
             return jsonify({"error": "Invalid data"}), 400
-        
+
         # Send order to Easyship API
         headers = {
             "Authorization": f"Bearer {EASYSHIP_ACCESS_TOKEN}",
@@ -52,4 +52,7 @@ def snipcart_webhook():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
+
