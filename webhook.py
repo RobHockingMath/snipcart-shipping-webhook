@@ -21,6 +21,15 @@ def snipcart_webhook():
             logging.error("No order data found in payload.")
             return jsonify({"error": "Invalid data"}), 400
 
+        # Handle items array safely: if empty, use default values
+        items = order_data.get("items", [])
+        if items and len(items) > 0:
+            product_description = items[0].get("description", "Product")
+            product_weight = items[0].get("totalWeight", 0.5) or 0.5
+        else:
+            product_description = "Product"
+            product_weight = 0.5
+
         # Build the shipment payload for Easyship with required fields.
         # Origin address details are taken from your Easyship account.
         shipment_data = {
@@ -28,7 +37,7 @@ def snipcart_webhook():
             "selected_courier_id": "ups_express",
             "origin_address": {
                 "line_1": "10F.-7, No. 48, Sec. 1, Kaifeng St.",
-                "state": "Taipei",           # You might leave it as "Taipei" or add additional region info if required
+                "state": "Taipei",
                 "postal_code": "10044",
                 "contact_name": "Laird Robert Hocking",
                 "contact_phone": "+886970159207",
@@ -36,22 +45,18 @@ def snipcart_webhook():
                 "company_name": "Rob Hocking Math Art"
             },
             "destination_address": {
-                # Mapping destination details from Snipcart order data.
-                # Note: Adjust key names if needed depending on the structure.
+                # Map destination details from Snipcart order data:
                 "line_1": order_data.get("shippingAddress", {}).get("address1", ""),
                 "state": order_data.get("shippingAddress", {}).get("province", ""),
                 "postal_code": order_data.get("shippingAddress", {}).get("postalCode", ""),
                 "contact_name": order_data.get("shippingAddressName", ""),
                 "contact_phone": order_data.get("shippingAddress", {}).get("phone", ""),
-                # Fallback email: If order_data doesn't have an email, you may need a default.
                 "contact_email": order_data.get("email", "customer@example.com")
             },
             "parcels": [
                 {
-                    # Build a parcel based on the first item in the order.
-                    # Adjust these values as needed or build dynamically for multiple items.
-                    "description": order_data.get("items", [{}])[0].get("description", "Product"),
-                    "weight": order_data.get("items", [{}])[0].get("totalWeight", 0.5) or 0.5,
+                    "description": product_description,
+                    "weight": product_weight,
                     "dimensions": {
                         "length": 10,  # Dummy value; replace with actual dimensions if available
                         "width": 10,
