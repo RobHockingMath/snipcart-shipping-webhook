@@ -105,7 +105,9 @@ def snipcart_webhook():
                                 "height": product_height
                             },
                             "category": "Merchandise",
-                            "hs_code": ""
+                            # Use a dummy HS code. Replace with correct code or item_category_id
+                            "hs_code": "9405.92"
+                            # "item_category_id": 12345  # Alternatively, if using Easyship category
                         }
                     ]
                 }
