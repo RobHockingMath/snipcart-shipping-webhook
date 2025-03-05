@@ -4,11 +4,9 @@ import logging
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-
-# Configure logging to capture detailed output
 logging.basicConfig(level=logging.DEBUG)
 
-# 🔹 Replace with your Easyship Access Token (if needed)
+# 🔹 Replace with your Easyship Access Token
 EASYSHIP_ACCESS_TOKEN = "prod_pIQhZNB1f/1bxFy9+DzhBA6HzcBskRNogjeKXV7gWq0="
 
 @app.route("/snipcart-webhook", methods=["POST"])
@@ -25,24 +23,24 @@ def snipcart_webhook():
         items = order_data.get("items", [])
         if items and len(items) > 0:
             product_description = items[0].get("description", "Product")
-            # Try to get a custom weight field; if not present, fallback.
+            # Try custom 'weight'; if missing, fall back to 'totalWeight' or default.
             product_weight = items[0].get("weight")
             if product_weight is None:
                 product_weight = items[0].get("totalWeight", 0.5) or 0.5
             else:
                 product_weight = float(product_weight)
             
-            # Try to get dimensions from the item; use defaults if any are missing.
+            # Get dimensions if provided; otherwise, use defaults.
             product_length = items[0].get("length")
             product_width = items[0].get("width")
             product_height = items[0].get("height")
             if product_length is None or product_width is None or product_height is None:
-                product_length = product_length or 10
-                product_width  = product_width  or 10
-                product_height = product_height or 10
+                product_length = float(product_length) if product_length is not None else 10
+                product_width  = float(product_width)  if product_width is not None else 10
+                product_height = float(product_height) if product_height is not None else 10
             else:
                 product_length = float(product_length)
-                product_width  = float(product_width)
+                product_width = float(product_width)
                 product_height = float(product_height)
         else:
             product_description = "Product"
@@ -51,16 +49,16 @@ def snipcart_webhook():
             product_width = 10
             product_height = 10
 
-        # Build the shipment payload for Easyship with required fields.
+        # Build the shipment payload for Easyship.
         shipment_data = {
             "platform_name": "Snipcart",
             "selected_courier_id": "ups_express",
             "origin_address": {
                 "line_1": "10F.-7, No. 48, Sec. 1, Kaifeng St.",
-                "city": "Taipei",                 # Added required city
-                "state": "Taipei",                # Use appropriate state/region if needed
+                "city": "Taipei",                # Added required city field
+                "state": "Taipei",               # Adjust if needed
                 "postal_code": "10044",
-                "country_alpha2": "TW",           # Two-letter country code
+                "country_alpha2": "TW",          # Two-letter country code
                 "contact_name": "Laird Robert Hocking",
                 "contact_phone": "+886970159207",
                 "contact_email": "robhocking.mathart@gmail.com",
@@ -73,7 +71,8 @@ def snipcart_webhook():
                 "postal_code": order_data.get("shippingAddress", {}).get("postalCode", ""),
                 "country_alpha2": order_data.get("shippingAddress", {}).get("country", ""),
                 "contact_name": order_data.get("shippingAddressName", ""),
-                "contact_phone": order_data.get("shippingAddress", {}).get("phone", ""),
+                # Provide a default phone number if blank:
+                "contact_phone": order_data.get("shippingAddress", {}).get("phone", "0000000000"),
                 "contact_email": order_data.get("email", "customer@example.com")
             },
             "parcels": [
@@ -87,9 +86,22 @@ def snipcart_webhook():
                     },
                     "items": [
                         {
-                            "name": product_description,
-                            "quantity": 1,
-                            "unit_weight": product_weight
+                            "description": product_description,
+                            # Use 'actual_weight' for shipping calculations:
+                            "actual_weight": product_weight,
+                            # Use the order currency (default to CAD) as declared currency:
+                            "declared_currency": order_data.get("currency", "CAD").upper(),
+                            # Use the order subtotal as the declared customs value, if available:
+                            "declared_customs_value": order_data.get("subtotal", 1900.0),
+                            "dimensions": {
+                                "length": product_length,
+                                "width": product_width,
+                                "height": product_height
+                            },
+                            # Provide a generic category; adjust as necessary:
+                            "category": "Merchandise",
+                            # Leave hs_code blank if not applicable:
+                            "hs_code": ""
                         }
                     ]
                 }
@@ -119,5 +131,5 @@ def snipcart_webhook():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # Force the app to listen on port 5000 to match Railway's expected upstream port.
+    # Force the app to listen on port 5000 (matching Railway's expected upstream port)
     app.run(host="0.0.0.0", port=5000, debug=True)
