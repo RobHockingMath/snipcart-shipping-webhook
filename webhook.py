@@ -19,40 +19,47 @@ def snipcart_webhook():
             logging.error("No order data found in payload.")
             return jsonify({"error": "Invalid data"}), 400
 
-        # Handle items array safely: if empty, use default values.
+        # If there are no items, no need to call Easyship.
         items = order_data.get("items", [])
-        if items and len(items) > 0:
-            product_description = items[0].get("description", "Product")
-            product_weight = items[0].get("weight")
-            if product_weight is None:
-                product_weight = items[0].get("totalWeight", 0.5) or 0.5
-            else:
-                product_weight = float(product_weight)
-            
-            product_length = items[0].get("length")
-            product_width = items[0].get("width")
-            product_height = items[0].get("height")
-            if product_length is None or product_width is None or product_height is None:
-                product_length = float(product_length) if product_length is not None else 10
-                product_width  = float(product_width)  if product_width is not None else 10
-                product_height = float(product_height) if product_height is not None else 10
-            else:
-                product_length = float(product_length)
-                product_width = float(product_width)
-                product_height = float(product_height)
+        if not items or len(items) == 0:
+            logging.warning("No items in the order. Skipping shipment creation.")
+            return jsonify({"error": "No items in order"}), 400
+
+        product_description = items[0].get("description", "Product")
+        product_weight = items[0].get("weight")
+        if product_weight is None:
+            product_weight = items[0].get("totalWeight", 0.5) or 0.5
         else:
-            product_description = "Product"
-            product_weight = 0.5
-            product_length = 10
-            product_width = 10
-            product_height = 10
+            product_weight = float(product_weight)
+
+        product_length = items[0].get("length")
+        product_width = items[0].get("width")
+        product_height = items[0].get("height")
+        if product_length is None or product_width is None or product_height is None:
+            product_length = float(product_length) if product_length is not None else 10
+            product_width  = float(product_width)  if product_width is not None else 10
+            product_height = float(product_height) if product_height is not None else 10
+        else:
+            product_length = float(product_length)
+            product_width  = float(product_width)
+            product_height = float(product_height)
+
+        # Force a positive declared customs value
+        declared_value = order_data.get("subtotal", 0)
+        try:
+            declared_value = float(declared_value)
+        except ValueError:
+            declared_value = 0
+
+        # Easyship requires > 0
+        if declared_value <= 0:
+            declared_value = 1.0  # fallback to 1 if the subtotal is zero or missing
 
         # Check destination phone and set default if empty
         dest_phone = order_data.get("shippingAddress", {}).get("phone", "").strip()
         if not dest_phone:
             dest_phone = "0000000000"
 
-        # Build the shipment payload for Easyship.
         shipment_data = {
             "platform_name": "Snipcart",
             "selected_courier_id": "ups_express",
@@ -91,7 +98,7 @@ def snipcart_webhook():
                             "description": product_description,
                             "actual_weight": product_weight,
                             "declared_currency": order_data.get("currency", "CAD").upper(),
-                            "declared_customs_value": order_data.get("subtotal", 1900.0),
+                            "declared_customs_value": declared_value,
                             "dimensions": {
                                 "length": product_length,
                                 "width": product_width,
@@ -109,7 +116,11 @@ def snipcart_webhook():
             "Authorization": f"Bearer {EASYSHIP_ACCESS_TOKEN}",
             "Content-Type": "application/json"
         }
-        response = requests.post("https://api.easyship.com/v2/shipments", json=shipment_data, headers=headers)
+        response = requests.post(
+            "https://api.easyship.com/v2/shipments", 
+            json=shipment_data, 
+            headers=headers
+        )
 
         if response.status_code == 200:
             shipment = response.json()
@@ -119,8 +130,11 @@ def snipcart_webhook():
                 "label_url": shipment.get("label_url")
             })
         else:
-            logging.error("Easyship API call failed with status code %s and response: %s",
-                          response.status_code, response.text)
+            logging.error(
+                "Easyship API call failed with status code %s and response: %s",
+                response.status_code,
+                response.text
+            )
             return jsonify({"error": "Failed to create shipment"}), 500
 
     except Exception as e:
@@ -128,4 +142,5 @@ def snipcart_webhook():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
+    # Force the app to listen on port 5000 (matching Railway's expected upstream port)
     app.run(host="0.0.0.0", port=5000, debug=True)
