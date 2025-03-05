@@ -21,34 +21,57 @@ def snipcart_webhook():
             logging.error("No order data found in payload.")
             return jsonify({"error": "Invalid data"}), 400
 
-        # Handle items array safely: if empty, use default values
+        # Handle items array safely: if empty, use default values.
         items = order_data.get("items", [])
         if items and len(items) > 0:
             product_description = items[0].get("description", "Product")
-            product_weight = items[0].get("totalWeight", 0.5) or 0.5
+            # Try to get a custom weight field; if not present, fallback.
+            product_weight = items[0].get("weight")
+            if product_weight is None:
+                product_weight = items[0].get("totalWeight", 0.5) or 0.5
+            else:
+                product_weight = float(product_weight)
+            
+            # Try to get dimensions from the item; use defaults if any are missing.
+            product_length = items[0].get("length")
+            product_width = items[0].get("width")
+            product_height = items[0].get("height")
+            if product_length is None or product_width is None or product_height is None:
+                product_length = product_length or 10
+                product_width  = product_width  or 10
+                product_height = product_height or 10
+            else:
+                product_length = float(product_length)
+                product_width  = float(product_width)
+                product_height = float(product_height)
         else:
             product_description = "Product"
             product_weight = 0.5
+            product_length = 10
+            product_width = 10
+            product_height = 10
 
         # Build the shipment payload for Easyship with required fields.
-        # Origin address details are taken from your Easyship account.
         shipment_data = {
             "platform_name": "Snipcart",
             "selected_courier_id": "ups_express",
             "origin_address": {
                 "line_1": "10F.-7, No. 48, Sec. 1, Kaifeng St.",
-                "state": "Taipei",
+                "city": "Taipei",                 # Added required city
+                "state": "Taipei",                # Use appropriate state/region if needed
                 "postal_code": "10044",
+                "country_alpha2": "TW",           # Two-letter country code
                 "contact_name": "Laird Robert Hocking",
                 "contact_phone": "+886970159207",
                 "contact_email": "robhocking.mathart@gmail.com",
                 "company_name": "Rob Hocking Math Art"
             },
             "destination_address": {
-                # Map destination details from Snipcart order data:
                 "line_1": order_data.get("shippingAddress", {}).get("address1", ""),
+                "city": order_data.get("shippingAddress", {}).get("city", ""),
                 "state": order_data.get("shippingAddress", {}).get("province", ""),
                 "postal_code": order_data.get("shippingAddress", {}).get("postalCode", ""),
+                "country_alpha2": order_data.get("shippingAddress", {}).get("country", ""),
                 "contact_name": order_data.get("shippingAddressName", ""),
                 "contact_phone": order_data.get("shippingAddress", {}).get("phone", ""),
                 "contact_email": order_data.get("email", "customer@example.com")
@@ -58,10 +81,17 @@ def snipcart_webhook():
                     "description": product_description,
                     "weight": product_weight,
                     "dimensions": {
-                        "length": 10,  # Dummy value; replace with actual dimensions if available
-                        "width": 10,
-                        "height": 10
-                    }
+                        "length": product_length,
+                        "width": product_width,
+                        "height": product_height
+                    },
+                    "items": [
+                        {
+                            "name": product_description,
+                            "quantity": 1,
+                            "unit_weight": product_weight
+                        }
+                    ]
                 }
             ]
         }
@@ -80,7 +110,8 @@ def snipcart_webhook():
                 "label_url": shipment.get("label_url")
             })
         else:
-            logging.error("Easyship API call failed with status code %s and response: %s", response.status_code, response.text)
+            logging.error("Easyship API call failed with status code %s and response: %s",
+                          response.status_code, response.text)
             return jsonify({"error": "Failed to create shipment"}), 500
 
     except Exception as e:
