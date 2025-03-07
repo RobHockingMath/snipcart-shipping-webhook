@@ -2,6 +2,8 @@ const express = require("express");
 const app = express();
 app.use(express.json());
 
+const PORT = process.env.PORT || 3000;
+
 // Allowed weights (in kg): first two are 0.25 and 0.5, then every 0.5 kg from 1.0 to 30.0.
 const allowedWeights = [0.25, 0.5];
 for (let w = 1.0; w <= 30; w += 0.5) {
@@ -292,10 +294,11 @@ app.post("/shippingrates", (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
+// --- Root route ---
+app.get("/", (req, res) => {
+  res.send("Shipping webhook is live!");
+});
+
 app.listen(PORT, () => console.log(`Shipping webhook running on port ${PORT}`));
 
-app.get("/", (req, res) => {
-    res.send("Shipping webhook is live!");
-});
 
