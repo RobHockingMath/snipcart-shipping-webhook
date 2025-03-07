@@ -239,16 +239,24 @@ function getShippingData(country, method, weight) {
          shippingRates[country][method][weightStr];
 }
 
+app.post("/shippingrates", (req, res) => {
+    console.log("Request received:", JSON.stringify(req.body, null, 2));
+    // ... rest of your existing code remains unchanged
+
 // --- Webhook endpoint ---
 app.post("/shippingrates", (req, res) => {
-  const { currency, items, shippingAddress } = req.body;
-  if (!shippingAddress || !shippingAddress.country) {
-    return res.status(400).json({ rates: [], error: "Missing shipping country" });
-  }
-  const countryCode = shippingAddress.country.toUpperCase();
-  if (!shippingRates[countryCode]) {
-    return res.status(400).json({ rates: [], error: "We do not ship to this country" });
-  }
+    console.log("Request received:", JSON.stringify(req.body, null, 2));
+  
+    const { currency, items, shippingAddress } = req.body;
+    
+    if (!shippingAddress || !shippingAddress.country) {
+      return res.status(400).json({ rates: [], error: "Missing shipping country" });
+    }
+    
+    const countryCode = shippingAddress.country.toUpperCase();
+    if (!shippingRates[countryCode]) {
+      return res.status(400).json({ rates: [], error: "We do not ship to this country" });
+    }
 
   // Sum the total weight (assumed in grams) and convert to kg.
   let totalWeightGrams = items.reduce((sum, item) => sum + (item.weight || 0), 0);
