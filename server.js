@@ -54,7 +54,7 @@ const HK_slow = [
   2305
 ];
 
-// Singapore (SG) – dummy explicit list (61 values)
+// Singapore (SG)
 const SG_fast = [
   580, 580, 630, 680, 730, 790, 850, 920, 990, 1060,
   1130, 1200, 1270, 1340, 1410, 1480, 1550, 1620, 1690, 1760,
@@ -175,7 +175,6 @@ const GB_slow = [
 ];
 
 // --- Build the shipping data dictionary ---
-// Keys are in the form "COUNTRY_METHOD_WEIGHT" (with weight formatted as a string with two decimals).
 let shippingRates = {};
 
 for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
@@ -254,7 +253,9 @@ function getShippingData(country, method, weight) {
 app.post("/shippingrates", (req, res) => {
   console.log("Request received:", JSON.stringify(req.body, null, 2));
 
-  const { currency, items, shippingAddress } = req.body;
+  // Snipcart typically sends data under req.body.content
+  // If content doesn't exist (e.g., local tests), fallback to req.body
+  const { currency, items, shippingAddress } = req.body.content || req.body;
 
   if (!shippingAddress || !shippingAddress.country) {
     return res.status(400).json({ rates: [], error: "Missing shipping country" });
