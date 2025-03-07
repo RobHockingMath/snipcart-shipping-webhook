@@ -61,7 +61,7 @@ const SG_fast = [
   1830, 1890, 1950, 2010, 2070, 2130, 2190, 2250, 2310, 2370,
   2430, 2490, 2550, 2610, 2670, 2730, 2790, 2850, 2910, 2970,
   3030, 3080, 3130, 3180, 3230, 3280, 3330, 3380, 3430, 3480,
-  3530, 3580, 3630, 3680, 3730, 3780, 3830, 3880, 3930, 3980, 
+  3530, 3580, 3630, 3680, 3730, 3780, 3830, 3880, 3930, 3980,
   4030
 ];
 const SG_slow = [
@@ -205,15 +205,24 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
       shippingRates[country][method][w.toFixed(2)] = {
         cost: costArray[i],
         // For this example, use constant delay values (dummy data)
-        delay: (country === "TW" ? { min: method === "fast" ? 1 : 3, max: method === "fast" ? 1 : 3 } :
-                country === "HK" ? { min: method === "fast" ? 1 : 7, max: method === "fast" ? 2 : 10 } :
-                country === "SG" ? { min: method === "fast" ? 2 : 8, max: method === "fast" ? 3 : 10 } :
-                country === "KR" ? { min: method === "fast" ? 4 : 7, max: method === "fast" ? 4 : 7 } :
-                country === "JP" ? { min: method === "fast" ? 3 : 5, max: method === "fast" ? 3 : 5 } :
-                country === "US" ? { min: method === "fast" ? 5 : 8, max: method === "fast" ? 5 : 8 } :
-                country === "CA" ? { min: method === "fast" ? 6 : 10, max: method === "fast" ? 6 : 10 } :
-                country === "GB" ? { min: method === "fast" ? 4 : 7, max: method === "fast" ? 4 : 7 } :
-                { min: 0, max: 0 })
+        delay: (country === "TW"
+          ? { min: method === "fast" ? 1 : 3, max: method === "fast" ? 1 : 3 }
+          : country === "HK"
+          ? { min: method === "fast" ? 1 : 7, max: method === "fast" ? 2 : 10 }
+          : country === "SG"
+          ? { min: method === "fast" ? 2 : 8, max: method === "fast" ? 3 : 10 }
+          : country === "KR"
+          ? { min: method === "fast" ? 4 : 7, max: method === "fast" ? 4 : 7 }
+          : country === "JP"
+          ? { min: method === "fast" ? 3 : 5, max: method === "fast" ? 3 : 5 }
+          : country === "US"
+          ? { min: method === "fast" ? 5 : 8, max: method === "fast" ? 5 : 8 }
+          : country === "CA"
+          ? { min: method === "fast" ? 6 : 10, max: method === "fast" ? 6 : 10 }
+          : country === "GB"
+          ? { min: method === "fast" ? 4 : 7, max: method === "fast" ? 4 : 7 }
+          : { min: 0, max: 0 }
+        )
       };
     });
   }
@@ -234,29 +243,27 @@ const conversionRates = {
 // Helper: look up shipping data given country, method, and weight threshold.
 function getShippingData(country, method, weight) {
   const weightStr = weight.toFixed(2);
-  return shippingRates[country] &&
-         shippingRates[country][method] &&
-         shippingRates[country][method][weightStr];
+  return (
+    shippingRates[country] &&
+    shippingRates[country][method] &&
+    shippingRates[country][method][weightStr]
+  );
 }
 
+// --- Webhook endpoint (single definition) ---
 app.post("/shippingrates", (req, res) => {
-    console.log("Request received:", JSON.stringify(req.body, null, 2));
-    // ... rest of your existing code remains unchanged
+  console.log("Request received:", JSON.stringify(req.body, null, 2));
 
-// --- Webhook endpoint ---
-app.post("/shippingrates", (req, res) => {
-    console.log("Request received:", JSON.stringify(req.body, null, 2));
-  
-    const { currency, items, shippingAddress } = req.body;
-    
-    if (!shippingAddress || !shippingAddress.country) {
-      return res.status(400).json({ rates: [], error: "Missing shipping country" });
-    }
-    
-    const countryCode = shippingAddress.country.toUpperCase();
-    if (!shippingRates[countryCode]) {
-      return res.status(400).json({ rates: [], error: "We do not ship to this country" });
-    }
+  const { currency, items, shippingAddress } = req.body;
+
+  if (!shippingAddress || !shippingAddress.country) {
+    return res.status(400).json({ rates: [], error: "Missing shipping country" });
+  }
+
+  const countryCode = shippingAddress.country.toUpperCase();
+  if (!shippingRates[countryCode]) {
+    return res.status(400).json({ rates: [], error: "We do not ship to this country" });
+  }
 
   // Sum the total weight (assumed in grams) and convert to kg.
   let totalWeightGrams = items.reduce((sum, item) => sum + (item.weight || 0), 0);
@@ -271,14 +278,18 @@ app.post("/shippingrates", (req, res) => {
     }
   }
   if (selectedWeight === null) {
-    return res.status(400).json({ rates: [], error: "Total weight exceeds maximum allowed (30 kg)" });
+    return res
+      .status(400)
+      .json({ rates: [], error: "Total weight exceeds maximum allowed (30 kg)" });
   }
 
   // Look up shipping data for both fast and slow methods.
   const fastData = getShippingData(countryCode, "fast", selectedWeight);
   const slowData = getShippingData(countryCode, "slow", selectedWeight);
   if (!fastData || !slowData) {
-    return res.status(400).json({ rates: [], error: "Shipping data not available for this weight" });
+    return res
+      .status(400)
+      .json({ rates: [], error: "Shipping data not available for this weight" });
   }
 
   // Convert cost from NTD to the requested currency.
@@ -308,5 +319,3 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Shipping webhook running on port ${PORT}`));
-
-
