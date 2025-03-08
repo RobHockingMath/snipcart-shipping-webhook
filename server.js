@@ -283,10 +283,18 @@ app.post("/shippingrates", (req, res) => {
     }
   }
   if (selectedWeight === null) {
-    return res.status(200).json({
-        rates: [],
-        error: "Order is too heavy."
-      });
+    // Instead of returning .status(400) or an empty rates array
+    return res.json({
+      // No shipping methods
+      rates: [],
+      // Snipcart-specific array of errors
+      errors: [
+        {
+          key: "overweight",
+          message: "Your order exceeds the 30 kg limit. Please remove some items."
+        }
+      ]
+    });
   }
 
   // We'll collect whichever shipping methods are available
