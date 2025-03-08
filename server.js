@@ -12,7 +12,7 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 allowedWeights.sort((a, b) => a - b); // This array now has 61 values
 
 // --- Explicit cost arrays for each country and method ---
-// Each array must have 61 numbers corresponding to the allowed weights.
+// (No changes to your arrays)
 
 // Taiwan (TW)
 const TW_fast = [
@@ -98,8 +98,8 @@ const JP_fast = [
   1130, 1200, 1270, 1340, 1410, 1480, 1550, 1620, 1690, 1760,
   1830, 1890, 1950, 2010, 2070, 2130, 2190, 2250, 2310, 2370,
   2430, 2490, 2550, 2610, 2670, 2730, 2790, 2850, 2910, 2970,
-  3030, 3080, 3130, 3180, 3230, 3280, 3330, 3380, 3430, 3480, 
-  3530, 3580, 3630, 3680, 3730, 3780, 3830, 3880, 3930, 3980, 
+  3030, 3080, 3130, 3180, 3230, 3280, 3330, 3380, 3430, 3480,
+  3530, 3580, 3630, 3680, 3730, 3780, 3830, 3880, 3930, 3980,
   4030
 ];
 const JP_slow = [
@@ -225,9 +225,11 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
   }
 }
 
-// --- Currency conversion rates (from NTD) ---
+// --- Currency conversion rates (from TWD) ---
 const conversionRates = {
-  "NTD": 1,
+  // CHANGED: Use "TWD": 1 if your base is TWD.
+  // If Snipcart actually sends "NTD", keep it as "NTD": 1
+  "TWD": 1,
   "HKD": 0.25,
   "SGD": 0.045,
   "JPY": 4.5,
@@ -282,12 +284,14 @@ app.post("/shippingrates", (req, res) => {
   }
 
   // We'll collect whichever shipping methods are available
+  // => Only shipping cost is converted, item prices not touched
   const convRate = conversionRates[currency] || 1;
   let rates = [];
 
   // Try FAST shipping
   const fastData = getShippingData(countryCode, "fast", selectedWeight);
   if (fastData) {
+    // Convert from TWD to chosen currency
     const fastCost = (fastData.cost * convRate).toFixed(2);
     rates.push({
       cost: fastCost,
