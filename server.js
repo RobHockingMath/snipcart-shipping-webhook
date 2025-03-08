@@ -257,7 +257,6 @@ app.post("/shippingrates", (req, res) => {
   // If content doesn't exist (e.g., local tests), fallback to req.body
   const { currency, items, shippingAddress } = req.body.content || req.body;
 
-  //const userCurrency = currency.toUpperCase(); // userCurrency = "CAD"
 
   if (!shippingAddress || !shippingAddress.country) {
     return res.status(400).json({ rates: [], error: "Missing shipping country" });
@@ -268,8 +267,12 @@ app.post("/shippingrates", (req, res) => {
     return res.status(400).json({ rates: [], error: "We do not ship to this country" });
   }
 
-  // Sums up item.weight (already in kg)
-  const totalWeightKg = items.reduce((sum, item) => sum + (item.weight || 0), 0);
+  // ❗ CHANGE: Multiply by item.quantity, if present
+  const totalWeightKg = items.reduce((sum, item) => {
+    const itemWeight = item.weight || 0;
+    const itemQuantity = item.quantity || 1; 
+    return sum + itemWeight * itemQuantity;
+  }, 0);
 
   // Find the smallest allowed weight that is >= totalWeightKg.
   let selectedWeight = null;
