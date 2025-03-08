@@ -229,14 +229,14 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
 const conversionRates = {
   // CHANGED: Use "TWD": 1 if your base is TWD.
   // If Snipcart actually sends "NTD", keep it as "NTD": 1
-  "TWD": 1,
-  "HKD": 0.25,
-  "SGD": 0.045,
-  "JPY": 4.5,
-  "KRW": 42,
-  "GBP": 0.025,
-  "USD": 0.03,
-  "CAD": 0.04
+  "twd": 1,
+  "hkd": 0.25,
+  "sgd": 0.045,
+  "jpy": 4.5,
+  "krw": 42,
+  "gbp": 0.025,
+  "usd": 0.03,
+  "cad": 0.04
 };
 
 // Helper: look up shipping data given country, method, and weight threshold.
@@ -256,6 +256,8 @@ app.post("/shippingrates", (req, res) => {
   // Snipcart typically sends data under req.body.content
   // If content doesn't exist (e.g., local tests), fallback to req.body
   const { currency, items, shippingAddress } = req.body.content || req.body;
+
+  //const userCurrency = currency.toUpperCase(); // userCurrency = "CAD"
 
   if (!shippingAddress || !shippingAddress.country) {
     return res.status(400).json({ rates: [], error: "Missing shipping country" });
