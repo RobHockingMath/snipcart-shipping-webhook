@@ -288,6 +288,8 @@ app.post("/shippingrates", (req, res) => {
   const convRate = conversionRates[currency] || 1;
   let rates = [];
 
+  console.log("Snipcart says currency is:", currency);
+
   // Try FAST shipping
   const fastData = getShippingData(countryCode, "fast", selectedWeight);
   if (fastData) {
