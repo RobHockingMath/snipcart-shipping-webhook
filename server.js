@@ -1,10 +1,11 @@
-const express = require("express");
+const express = require("express"); 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Allowed weights (in kg): first two are 0.25 and 0.5, then every 0.5 kg from 1.0 to 30.0.
+// Allowed weights (in kg): first two are 0.25 and 0.5,
+// then every 0.5 kg from 1.0 to 30.0.
 const allowedWeights = [0.25, 0.5];
 for (let w = 1.0; w <= 30; w += 0.5) {
   allowedWeights.push(parseFloat(w.toFixed(2)));
@@ -12,7 +13,6 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 allowedWeights.sort((a, b) => a - b); // This array now has 61 values
 
 // --- Explicit cost arrays for each country and method ---
-// (No changes to your arrays)
 
 // Taiwan (TW)
 const TW_fast = [
@@ -197,7 +197,7 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
     } else if (country === "GB") {
       costArray = method === "fast" ? GB_fast : GB_slow;
     }
-    // Assume that costArray has 61 numbers corresponding to allowedWeights.
+    // Assume costArray has 61 numbers corresponding to allowedWeights.
     allowedWeights.forEach((w, i) => {
       shippingRates[country][method][w.toFixed(2)] = {
         cost: costArray[i],
@@ -227,8 +227,6 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
 
 // --- Currency conversion rates (from TWD) ---
 const conversionRates = {
-  // CHANGED: Use "TWD": 1 if your base is TWD.
-  // If Snipcart actually sends "NTD", keep it as "NTD": 1
   "twd": 1,
   "hkd": 0.25,
   "sgd": 0.045,
@@ -253,28 +251,45 @@ function getShippingData(country, method, weight) {
 app.post("/shippingrates", (req, res) => {
   console.log("Request received:", JSON.stringify(req.body, null, 2));
 
-  // Snipcart typically sends data under req.body.content
-  // If content doesn't exist (e.g., local tests), fallback to req.body
   const { currency, items, shippingAddress } = req.body.content || req.body;
 
-
+  // 1) Check for missing shipping country
   if (!shippingAddress || !shippingAddress.country) {
-    return res.status(400).json({ rates: [], error: "Missing shipping country" });
+    return res.status(200).json({
+      rates: [],
+      errors: [
+        {
+          key: "noCountry",
+          message: "Missing shipping country.",
+          preventCheckout: true
+        }
+      ]
+    });
   }
 
+  // 2) Check if we ship to this country
   const countryCode = shippingAddress.country.toUpperCase();
   if (!shippingRates[countryCode]) {
-    return res.status(400).json({ rates: [], error: "We do not ship to this country" });
+    return res.status(200).json({
+      rates: [],
+      errors: [
+        {
+          key: "unsupportedCountry",
+          message: "We do not ship to this country.",
+          preventCheckout: true
+        }
+      ]
+    });
   }
 
-  // ❗ CHANGE: Multiply by item.quantity, if present
+  // 3) Sum item weights, factoring in quantity
   const totalWeightKg = items.reduce((sum, item) => {
     const itemWeight = item.weight || 0;
     const itemQuantity = item.quantity || 1; 
     return sum + itemWeight * itemQuantity;
   }, 0);
 
-  // Find the smallest allowed weight that is >= totalWeightKg.
+  // 4) If over 30 kg => return an error that blocks checkout
   let selectedWeight = null;
   for (let w of allowedWeights) {
     if (w >= totalWeightKg) {
@@ -283,31 +298,27 @@ app.post("/shippingrates", (req, res) => {
     }
   }
   if (selectedWeight === null) {
-    // Instead of returning .status(400) or an empty rates array
-    return res.json({
-      // No shipping methods
+    return res.status(200).json({
       rates: [],
-      // Snipcart-specific array of errors
       errors: [
         {
           key: "overweight",
-          message: "Your order exceeds the 30 kg limit. Please remove some items."
+          message: "Your order exceeds the 30 kg limit. Please remove some items.",
+          preventCheckout: true
         }
       ]
     });
   }
 
-  // We'll collect whichever shipping methods are available
-  // => Only shipping cost is converted, item prices not touched
+  // 5) Convert shipping costs to the chosen currency
   const convRate = conversionRates[currency] || 1;
-  let rates = [];
-
   console.log("Snipcart says currency is:", currency);
 
-  // Try FAST shipping
+  let rates = [];
+
+  // 6) Try FAST shipping
   const fastData = getShippingData(countryCode, "fast", selectedWeight);
   if (fastData) {
-    // Convert from TWD to chosen currency
     const fastCost = (fastData.cost * convRate).toFixed(2);
     rates.push({
       cost: fastCost,
@@ -316,7 +327,7 @@ app.post("/shippingrates", (req, res) => {
     });
   }
 
-  // Try SLOW shipping
+  // 7) Try SLOW shipping
   const slowData = getShippingData(countryCode, "slow", selectedWeight);
   if (slowData) {
     const slowCost = (slowData.cost * convRate).toFixed(2);
@@ -327,14 +338,21 @@ app.post("/shippingrates", (req, res) => {
     });
   }
 
-  // If no methods are available, respond with 400
+  // 8) If no shipping methods are found => block checkout
   if (rates.length === 0) {
-    return res
-      .status(400)
-      .json({ rates: [], error: "No shipping methods available for this weight" });
+    return res.status(200).json({
+      rates: [],
+      errors: [
+        {
+          key: "noMethods",
+          message: "No shipping methods available for your order.",
+          preventCheckout: true
+        }
+      ]
+    });
   }
 
-  // Otherwise, return all available methods
+  // 9) Otherwise, return the available shipping rates (HTTP 200)
   return res.json({ rates });
 });
 
