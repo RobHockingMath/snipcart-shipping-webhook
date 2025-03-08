@@ -1,4 +1,4 @@
-const express = require("express"); 
+const express = require("express");
 const app = express();
 app.use(express.json());
 
@@ -74,7 +74,7 @@ const SG_slow = [
   3465
 ];
 
-// Korea (KR) - fast array covers up to 30 kg, slow array is shorter
+// Korea (KR)
 const KR_fast = [
   450, 450, 530, 610, 690, 770, 850, 920, 990, 1060,
   1130, 1200, 1270, 1340, 1410, 1480, 1550, 1620, 1690, 1760,
@@ -237,7 +237,7 @@ const conversionRates = {
   "cad": 0.04
 };
 
-// Helper: look up shipping data given country, method, and weight threshold.
+// Helper: look up shipping data given country, method, weight
 function getShippingData(country, method, weight) {
   const weightStr = weight.toFixed(2);
   return (
@@ -247,7 +247,7 @@ function getShippingData(country, method, weight) {
   );
 }
 
-// --- Webhook endpoint (single definition) ---
+// --- Webhook endpoint ---
 app.post("/shippingrates", (req, res) => {
   console.log("Request received:", JSON.stringify(req.body, null, 2));
 
@@ -255,8 +255,8 @@ app.post("/shippingrates", (req, res) => {
 
   // 1) Check for missing shipping country
   if (!shippingAddress || !shippingAddress.country) {
+    // Return HTTP 200 + top-level "errors" array (Snipcart v3 pattern)
     return res.status(200).json({
-      rates: [],
       errors: [
         {
           key: "noCountry",
@@ -271,7 +271,6 @@ app.post("/shippingrates", (req, res) => {
   const countryCode = shippingAddress.country.toUpperCase();
   if (!shippingRates[countryCode]) {
     return res.status(200).json({
-      rates: [],
       errors: [
         {
           key: "unsupportedCountry",
@@ -285,11 +284,11 @@ app.post("/shippingrates", (req, res) => {
   // 3) Sum item weights, factoring in quantity
   const totalWeightKg = items.reduce((sum, item) => {
     const itemWeight = item.weight || 0;
-    const itemQuantity = item.quantity || 1; 
+    const itemQuantity = item.quantity || 1;
     return sum + itemWeight * itemQuantity;
   }, 0);
 
-  // 4) If over 30 kg => return an error that blocks checkout
+  // 4) If over 30 kg => show error
   let selectedWeight = null;
   for (let w of allowedWeights) {
     if (w >= totalWeightKg) {
@@ -298,8 +297,8 @@ app.post("/shippingrates", (req, res) => {
     }
   }
   if (selectedWeight === null) {
+    // Over the 30 kg limit => block checkout
     return res.status(200).json({
-      rates: [],
       errors: [
         {
           key: "overweight",
@@ -310,8 +309,8 @@ app.post("/shippingrates", (req, res) => {
     });
   }
 
-  // 5) Convert shipping costs to the chosen currency
-  const convRate = conversionRates[currency] || 1;
+  // 5) Convert shipping cost from TWD to user’s currency
+  const convRate = conversionRates[currency.toLowerCase()] || 1;
   console.log("Snipcart says currency is:", currency);
 
   let rates = [];
@@ -341,18 +340,17 @@ app.post("/shippingrates", (req, res) => {
   // 8) If no shipping methods are found => block checkout
   if (rates.length === 0) {
     return res.status(200).json({
-      rates: [],
       errors: [
         {
           key: "noMethods",
-          message: "No shipping methods available for your order.",
+          message: "No shipping methods available for this order.",
           preventCheckout: true
         }
       ]
     });
   }
 
-  // 9) Otherwise, return the available shipping rates (HTTP 200)
+  // 9) Otherwise, return shipping methods (HTTP 200 with rates array)
   return res.json({ rates });
 });
 
@@ -362,3 +360,4 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Shipping webhook running on port ${PORT}`));
+
