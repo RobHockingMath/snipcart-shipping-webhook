@@ -283,9 +283,10 @@ app.post("/shippingrates", (req, res) => {
     }
   }
   if (selectedWeight === null) {
-    return res
-      .status(400)
-      .json({ rates: [], error: "Total weight exceeds maximum allowed (30 kg)" });
+    return res.status(200).json({
+        rates: [],
+        error: "Order is too heavy."
+      });
   }
 
   // We'll collect whichever shipping methods are available
