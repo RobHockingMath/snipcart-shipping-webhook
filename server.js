@@ -4,15 +4,17 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Allowed weights (in kg): first two are 0.25 and 0.5,
-// then every 0.5 kg from 1.0 to 30.0.
+/**
+ * 1) Create our allowedWeights array:
+ *    [0.25, 0.5, 1.0, 1.5, ..., 30.0]
+ */
 const allowedWeights = [0.25, 0.5];
 for (let w = 1.0; w <= 30; w += 0.5) {
   allowedWeights.push(parseFloat(w.toFixed(2)));
 }
-allowedWeights.sort((a, b) => a - b); // This array now has 61 values
+allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
-// --- Explicit cost arrays for each country and method ---
+// --- ALL EXPLICIT COST ARRAYS (No Omissions) ---
 
 // Taiwan (TW)
 const TW_fast = [
@@ -172,13 +174,15 @@ const GB_slow = [
   7165
 ];
 
-// --- Build the shipping data dictionary ---
+// shippingRates dictionary
 let shippingRates = {};
 
+// Fill shippingRates with cost info keyed by weight
 for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
   shippingRates[country] = {};
   for (const method of ["fast", "slow"]) {
     shippingRates[country][method] = {};
+    // We'll pick the correct cost array
     let costArray;
     if (country === "TW") {
       costArray = method === "fast" ? TW_fast : TW_slow;
@@ -197,35 +201,18 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
     } else if (country === "GB") {
       costArray = method === "fast" ? GB_fast : GB_slow;
     }
-    // Assume costArray has 61 numbers corresponding to allowedWeights.
+
     allowedWeights.forEach((w, i) => {
       shippingRates[country][method][w.toFixed(2)] = {
+        // If the cost array is shorter than i, cost is undefined
         cost: costArray[i],
-        // For this example, use constant delay values (dummy data)
-        delay: (country === "TW"
-          ? { min: method === "fast" ? 1 : 3, max: method === "fast" ? 1 : 3 }
-          : country === "HK"
-          ? { min: method === "fast" ? 1 : 7, max: method === "fast" ? 2 : 10 }
-          : country === "SG"
-          ? { min: method === "fast" ? 2 : 8, max: method === "fast" ? 3 : 10 }
-          : country === "KR"
-          ? { min: method === "fast" ? 2 : 7, max: method === "fast" ? 3 : 10 }
-          : country === "JP"
-          ? { min: method === "fast" ? 2 : 7, max: method === "fast" ? 3 : 10 }
-          : country === "US"
-          ? { min: method === "fast" ? 4 : 10, max: method === "fast" ? 5 : 14 }
-          : country === "CA"
-          ? { min: method === "fast" ? 4 : 14, max: method === "fast" ? 5 : 18 }
-          : country === "GB"
-          ? { min: method === "fast" ? 4 : 13, max: method === "fast" ? 5 : 16 }
-          : { min: 0, max: 0 }
-        )
+        // Omitted or zero if beyond the array length, effectively skipping
       };
     });
   }
 }
 
-// --- Currency conversion rates (from TWD) ---
+// Currency conversion
 const conversionRates = {
   "twd": 1,
   "hkd": 0.25,
@@ -237,25 +224,65 @@ const conversionRates = {
   "cad": 0.04
 };
 
-// Helper: look up shipping data given country, method, weight
-function getShippingData(country, method, weight) {
-  const weightStr = weight.toFixed(2);
-  return (
-    shippingRates[country] &&
-    shippingRates[country][method] &&
-    shippingRates[country][method][weightStr]
-  );
+/**
+ * Finds cost bracket (and maximum capacity) for a given (country, method) cost array.
+ */
+function findBracketCost(country, method, totalWeightKg) {
+  // If country or method is missing, return null
+  if (!shippingRates[country] || !shippingRates[country][method]) {
+    return null;
+  }
+
+  const costMap = shippingRates[country][method];
+
+  // figure out the highest non-undefined bracket in costMap
+  let highestValidIndex = -1;
+  let costArrayLength = 0;
+
+  // We'll gather cost data in order, ignoring undefined
+  for (let i = 0; i < allowedWeights.length; i++) {
+    const wStr = allowedWeights[i].toFixed(2);
+    if (costMap[wStr] && costMap[wStr].cost !== undefined) {
+      highestValidIndex = i; // track the last i that had a cost
+      costArrayLength++;
+    }
+  }
+  if (highestValidIndex < 0) {
+    // means no bracket
+    return null;
+  }
+
+  const maxWeightPossible = allowedWeights[highestValidIndex];
+  // If totalWeightKg > maxWeightPossible => can't do this method
+  if (totalWeightKg > maxWeightPossible) {
+    return null;
+  }
+
+  // Otherwise find the bracket that covers totalWeightKg
+  for (let i = 0; i < allowedWeights.length; i++) {
+    const wVal = allowedWeights[i];
+    const wStr = wVal.toFixed(2);
+    if (!costMap[wStr] || costMap[wStr].cost === undefined) {
+      // skip undefined
+      continue;
+    }
+    if (wVal >= totalWeightKg) {
+      // this is the bracket for totalWeightKg
+      return costMap[wStr].cost; 
+    }
+  }
+
+  // If none bracket is found (shouldn't happen if we're consistent):
+  return null;
 }
 
-// --- Webhook endpoint ---
+// Shipping webhook
 app.post("/shippingrates", (req, res) => {
-  console.log("Request received:", JSON.stringify(req.body, null, 2));
+  console.log("Request body:", JSON.stringify(req.body, null, 2));
 
   const { currency, items, shippingAddress } = req.body.content || req.body;
-
-  // 1) Check for missing shipping country
   if (!shippingAddress || !shippingAddress.country) {
-    // Return HTTP 200 + top-level "errors" array (Snipcart v3 pattern)
+    // no shipping country => block
     return res.status(200).json({
       errors: [
         {
@@ -267,9 +294,9 @@ app.post("/shippingrates", (req, res) => {
     });
   }
 
-  // 2) Check if we ship to this country
   const countryCode = shippingAddress.country.toUpperCase();
   if (!shippingRates[countryCode]) {
+    // not supported => block
     return res.status(200).json({
       errors: [
         {
@@ -281,80 +308,60 @@ app.post("/shippingrates", (req, res) => {
     });
   }
 
-  // 3) Sum item weights, factoring in quantity
+  // sum weight
   const totalWeightKg = items.reduce((sum, item) => {
     const itemWeight = item.weight || 0;
-    const itemQuantity = item.quantity || 1;
-    return sum + itemWeight * itemQuantity;
+    const qty = item.quantity || 1;
+    return sum + itemWeight * qty;
   }, 0);
 
-  // 4) If over 30 kg => show error
-  let selectedWeight = null;
-  for (let w of allowedWeights) {
-    if (w >= totalWeightKg) {
-      selectedWeight = w;
-      break;
-    }
-  }
-  if (selectedWeight === null) {
-    // Over the 30 kg limit => block checkout
-    return res.status(200).json({
-      errors: [
-        {
-          key: "overweight",
-          message: "Your order exceeds the 30 kg limit. Please remove some items.",
-          preventCheckout: true
-        }
-      ]
-    });
-  }
+  console.log(`Computed total weight: ${totalWeightKg} kg`);
 
-  // 5) Convert shipping cost from TWD to user’s currency
-  const convRate = conversionRates[currency.toLowerCase()] || 1;
-  console.log("Snipcart says currency is:", currency);
+  // convert currency
+  const convRate = conversionRates[(currency || "").toLowerCase()] || 1;
+  console.log("Snipcart says currency:", currency, ", convRate=", convRate);
 
+  // Attempt "fast" shipping
   let rates = [];
-
-  // 6) Try FAST shipping
-  const fastData = getShippingData(countryCode, "fast", selectedWeight);
-  if (fastData) {
-    const fastCost = (fastData.cost * convRate).toFixed(2);
+  const fastCostRaw = findBracketCost(countryCode, "fast", totalWeightKg);
+  if (fastCostRaw !== null && fastCostRaw !== undefined) {
+    const costConverted = (fastCostRaw * convRate).toFixed(2);
     rates.push({
-      cost: fastCost,
-      description: `Fast Shipping (${fastData.delay.min}-${fastData.delay.max} days)`,
-      delay: { minimum: fastData.delay.min, maximum: fastData.delay.max }
+      cost: costConverted,
+      description: "Fast Shipping",
+      delay: { minimum: 2, maximum: 5 } // up to you
     });
   }
 
-  // 7) Try SLOW shipping
-  const slowData = getShippingData(countryCode, "slow", selectedWeight);
-  if (slowData) {
-    const slowCost = (slowData.cost * convRate).toFixed(2);
+  // Attempt "slow" shipping
+  const slowCostRaw = findBracketCost(countryCode, "slow", totalWeightKg);
+  if (slowCostRaw !== null && slowCostRaw !== undefined) {
+    const costConverted = (slowCostRaw * convRate).toFixed(2);
     rates.push({
-      cost: slowCost,
-      description: `Slow Shipping (${slowData.delay.min}-${slowData.delay.max} days)`,
-      delay: { minimum: slowData.delay.min, maximum: slowData.delay.max }
+      cost: costConverted,
+      description: "Slow Shipping",
+      delay: { minimum: 7, maximum: 14 }
     });
   }
 
-  // 8) If no shipping methods are found => block checkout
+  // If no methods => block
   if (rates.length === 0) {
     return res.status(200).json({
       errors: [
         {
-          key: "noMethods",
-          message: "No shipping methods available for this order.",
+          key: "overweightOrNoMethod",
+          message: "No shipping method is available for that weight/country.",
           preventCheckout: true
         }
       ]
     });
   }
 
-  // 9) Otherwise, return shipping methods (HTTP 200 with rates array)
+  // Otherwise success
   return res.json({ rates });
 });
 
-// --- Root route ---
+// Root route
 app.get("/", (req, res) => {
   res.send("Shipping webhook is live!");
 });
