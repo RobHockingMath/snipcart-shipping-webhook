@@ -14,11 +14,9 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 }
 allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
-//
 // ─────────────────────────────────────────────────────────────────────────────
 //   :: All shipping cost arrays
 // ─────────────────────────────────────────────────────────────────────────────
-//
 
 // Taiwan (TW)
 const TW_fast = [
@@ -233,8 +231,8 @@ const conversionRates = {
 
 /**
  * Given a (country, method) and a totalWeightKg, this function returns the cost for the
- * first allowed bracket that is greater than or equal to totalWeightKg. If totalWeightKg
- * exceeds the highest available bracket for that method, it returns null.
+ * first allowed bracket that is greater than or equal to totalWeightKg.
+ * If totalWeightKg exceeds the highest available bracket for that method, it returns null.
  */
 function findBracketCost(country, method, totalWeightKg) {
   if (!shippingRates[country] || !shippingRates[country][method]) {
@@ -282,6 +280,7 @@ app.post("/shippingrates", (req, res) => {
   // 1) Check for missing shipping country.
   if (!shippingAddress || !shippingAddress.country) {
     return res.status(200).json({
+      rates: [],
       errors: [
         {
           key: "noCountry",
@@ -295,6 +294,7 @@ app.post("/shippingrates", (req, res) => {
   const countryCode = shippingAddress.country.toUpperCase();
   if (!shippingRates[countryCode]) {
     return res.status(200).json({
+      rates: [],
       errors: [
         {
           key: "unsupportedCountry",
@@ -341,9 +341,10 @@ app.post("/shippingrates", (req, res) => {
     });
   }
 
-  // 5) If no shipping methods are available, return an error response with ONLY an errors array.
+  // 5) If no shipping methods are available, return an error response.
   if (rates.length === 0) {
     return res.status(200).json({
+      rates: [],
       errors: [
         {
           key: "noMethodsOrOverweight",
@@ -358,7 +359,9 @@ app.post("/shippingrates", (req, res) => {
   return res.status(200).json({ rates });
 });
 
-// Basic root route.
+// ─────────────────────────────────────────────────────────────────────────────
+//   Basic root route.
+// ─────────────────────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.send("Shipping webhook is live!");
 });
