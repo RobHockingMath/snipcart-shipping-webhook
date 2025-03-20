@@ -14,9 +14,11 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 }
 allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
+//
 // ─────────────────────────────────────────────────────────────────────────────
 //   :: All shipping cost arrays
 // ─────────────────────────────────────────────────────────────────────────────
+//
 
 // Taiwan (TW)
 const TW_fast = [
@@ -231,8 +233,9 @@ const conversionRates = {
 
 /**
  * Given a (country, method) and a totalWeightKg, this function returns the cost for the
- * first allowed bracket that is greater than or equal to totalWeightKg.
- * If totalWeightKg exceeds the highest available bracket for that method, it returns null.
+ * first allowed bracket (from the cost array) that is greater than or equal to totalWeightKg.
+ * If totalWeightKg exceeds the maximum weight (i.e. the highest bracket for which a cost is defined),
+ * it returns null.
  */
 function findBracketCost(country, method, totalWeightKg) {
   if (!shippingRates[country] || !shippingRates[country][method]) {
@@ -240,34 +243,27 @@ function findBracketCost(country, method, totalWeightKg) {
   }
   const costMap = shippingRates[country][method];
 
-  // Determine the highest bracket index that has a defined cost.
-  let highestValidIndex = -1;
-  for (let i = 0; i < allowedWeights.length; i++) {
-    const wStr = allowedWeights[i].toFixed(2);
-    if (costMap[wStr] && costMap[wStr].cost !== undefined) {
-      highestValidIndex = i;
-    }
-  }
-  if (highestValidIndex < 0) {
-    return null;
-  }
-  const maxWeightPossible = allowedWeights[highestValidIndex];
+  // Build an array of valid weights for which a cost is defined.
+  const validWeights = allowedWeights.filter(w => {
+    const wStr = w.toFixed(2);
+    return costMap[wStr] && costMap[wStr].cost !== undefined;
+  });
+
+  if (validWeights.length === 0) return null;
+
+  // Maximum allowed weight for this country/method is the highest valid weight.
+  const maxWeightPossible = validWeights[validWeights.length - 1];
   if (totalWeightKg > maxWeightPossible) {
-    return null; // Order too heavy for this method.
+    return null; // Order too heavy for this shipping method.
   }
 
-  // Find the smallest bracket that is >= totalWeightKg.
-  for (let i = 0; i < allowedWeights.length; i++) {
-    const wVal = allowedWeights[i];
-    const wStr = wVal.toFixed(2);
-    if (!costMap[wStr] || costMap[wStr].cost === undefined) {
-      continue;
-    }
-    if (wVal >= totalWeightKg) {
-      return costMap[wStr].cost;
+  // Find the smallest valid weight bracket that is >= totalWeightKg.
+  for (let w of validWeights) {
+    if (w >= totalWeightKg) {
+      return costMap[w.toFixed(2)].cost;
     }
   }
-  return null;
+  return null; // Fallback.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -369,4 +365,3 @@ app.get("/", (req, res) => {
 app.listen(PORT, () =>
   console.log(`Shipping webhook running on port ${PORT}`)
 );
-
