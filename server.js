@@ -180,7 +180,7 @@ const GB_slow = [
 
 //
 // ─────────────────────────────────────────────────────────────────────────────
-//   :: Build the shippingRates dictionary
+//   Build the shippingRates dictionary
 // ─────────────────────────────────────────────────────────────────────────────
 //
 let shippingRates = {};
@@ -209,7 +209,7 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
     }
     allowedWeights.forEach((w, i) => {
       shippingRates[country][method][w.toFixed(2)] = {
-        cost: costArray[i] // If i >= costArray.length, cost is undefined.
+        cost: costArray[i] // cost is undefined if i >= costArray.length.
       };
     });
   }
@@ -217,7 +217,7 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
 
 //
 // ─────────────────────────────────────────────────────────────────────────────
-//   :: Currency conversion rates (from TWD)
+//   Currency conversion rates (TWD base)
 // ─────────────────────────────────────────────────────────────────────────────
 //
 const conversionRates = {
@@ -232,9 +232,9 @@ const conversionRates = {
 };
 
 /**
- * Given a (country, method) and a totalWeightKg, this function returns the cost for the first
- * allowed bracket that is >= totalWeightKg. If the total weight exceeds the highest bracket for
- * that method, it returns null.
+ * Given a (country, method) and a totalWeightKg, this function returns the cost for the
+ * first allowed bracket that is greater than or equal to totalWeightKg. If totalWeightKg
+ * exceeds the highest available bracket for that method, it returns null.
  */
 function findBracketCost(country, method, totalWeightKg) {
   if (!shippingRates[country] || !shippingRates[country][method]) {
@@ -255,10 +255,10 @@ function findBracketCost(country, method, totalWeightKg) {
   }
   const maxWeightPossible = allowedWeights[highestValidIndex];
   if (totalWeightKg > maxWeightPossible) {
-    return null; // Overweight for this method.
+    return null; // Order too heavy for this method.
   }
 
-  // Find the bracket that covers totalWeightKg.
+  // Find the smallest bracket that is >= totalWeightKg.
   for (let i = 0; i < allowedWeights.length; i++) {
     const wVal = allowedWeights[i];
     const wStr = wVal.toFixed(2);
@@ -272,7 +272,9 @@ function findBracketCost(country, method, totalWeightKg) {
   return null;
 }
 
-// Shipping webhook (Snipcart v3)
+// ─────────────────────────────────────────────────────────────────────────────
+//   Shipping webhook endpoint (Snipcart v3)
+// ─────────────────────────────────────────────────────────────────────────────
 app.post("/shippingrates", (req, res) => {
   console.log("Request body:", JSON.stringify(req.body, null, 2));
   const { currency, items, shippingAddress } = req.body.content || req.body;
@@ -280,7 +282,6 @@ app.post("/shippingrates", (req, res) => {
   // 1) Check for missing shipping country.
   if (!shippingAddress || !shippingAddress.country) {
     return res.status(200).json({
-      rates: [],
       errors: [
         {
           key: "noCountry",
@@ -294,7 +295,6 @@ app.post("/shippingrates", (req, res) => {
   const countryCode = shippingAddress.country.toUpperCase();
   if (!shippingRates[countryCode]) {
     return res.status(200).json({
-      rates: [],
       errors: [
         {
           key: "unsupportedCountry",
@@ -341,10 +341,9 @@ app.post("/shippingrates", (req, res) => {
     });
   }
 
-  // 5) If no shipping methods are available, return an error.
+  // 5) If no shipping methods are available, return an error response with ONLY an errors array.
   if (rates.length === 0) {
     return res.status(200).json({
-      rates: [],
       errors: [
         {
           key: "noMethodsOrOverweight",
@@ -359,7 +358,7 @@ app.post("/shippingrates", (req, res) => {
   return res.status(200).json({ rates });
 });
 
-// Root route
+// Basic root route.
 app.get("/", (req, res) => {
   res.send("Shipping webhook is live!");
 });
