@@ -14,11 +14,9 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 }
 allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
-//
-// ─────────────────────────────────────────────────────────────────────────────
-//   :: All shipping cost arrays
-// ─────────────────────────────────────────────────────────────────────────────
-//
+// ─────────────────────────────────────────────────────────────
+// :: All shipping cost arrays
+// ─────────────────────────────────────────────────────────────
 
 // Taiwan (TW)
 const TW_fast = [
@@ -242,7 +240,7 @@ function findBracketCost(country, method, totalWeightKg) {
   }
   const costMap = shippingRates[country][method];
 
-  // Build an array of valid weights (as numbers) for which a cost is defined.
+  // Build an array of valid weights for which a cost is defined.
   const validWeights = allowedWeights.filter(w => {
     const wStr = w.toFixed(2);
     return costMap[wStr] && costMap[wStr].cost !== undefined;
@@ -251,7 +249,6 @@ function findBracketCost(country, method, totalWeightKg) {
   if (validWeights.length === 0) return null;
   const maxWeightPossible = validWeights[validWeights.length - 1];
 
-  // Do not round here—we want to block orders that exceed the max by any amount.
   if (totalWeightKg > maxWeightPossible) {
     return null; // Order too heavy for this shipping method.
   }
@@ -268,7 +265,7 @@ function findBracketCost(country, method, totalWeightKg) {
 // ─────────────────────────────────────────────────────────────────────────────
 //   Shipping webhook endpoint (Snipcart v3)
 // ─────────────────────────────────────────────────────────────────────────────
-app.post("/shipping_rates", (req, res) => {
+app.post("/shipping-rates", (req, res) => {
   try {
     console.log("Request body:", JSON.stringify(req.body, null, 2));
     const { currency, items, shippingAddress } = req.body.content || req.body;
@@ -318,7 +315,6 @@ app.post("/shipping_rates", (req, res) => {
       const qty = parseFloat(item.quantity) || 1;
       return sum + w * qty;
     }, 0);
-    // Round total weight to 2 decimals.
     totalWeightKg = Math.round(totalWeightKg * 100) / 100;
     console.log(`Total weight: ${totalWeightKg} kg`);
 
@@ -350,7 +346,7 @@ app.post("/shipping_rates", (req, res) => {
       });
     }
 
-    // 6) If no shipping methods are available, return an error response WITHOUT a "rates" field.
+    // 6) If no shipping methods are available, return an error response with ONLY an "errors" field.
     if (rates.length === 0) {
       return res.status(200).json({
         errors: [
@@ -366,7 +362,7 @@ app.post("/shipping_rates", (req, res) => {
     // 7) Otherwise, return the shipping rates.
     return res.status(200).json({ rates });
   } catch (e) {
-    console.error("Error in shipping_rates endpoint:", e);
+    console.error("Error in shipping-rates endpoint:", e);
     return res.status(200).json({
       errors: [
         {
