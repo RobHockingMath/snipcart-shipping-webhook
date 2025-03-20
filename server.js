@@ -14,9 +14,11 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 }
 allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
+//
 // ─────────────────────────────────────────────────────────────────────────────
 //   :: All shipping cost arrays
 // ─────────────────────────────────────────────────────────────────────────────
+//
 
 // Taiwan (TW)
 const TW_fast = [
@@ -230,9 +232,9 @@ const conversionRates = {
 };
 
 /**
- * Given a (country, method) and a totalWeightKg, this function returns the cost for the
- * first allowed bracket (from the cost array) that is greater than or equal to totalWeightKg.
- * If totalWeightKg exceeds the maximum weight for which a cost is defined, it returns null.
+ * Given a (country, method) and a totalWeightKg, returns the cost for the first
+ * allowed bracket that is greater than or equal to totalWeightKg.
+ * Returns null if totalWeightKg exceeds the maximum allowed weight for that method.
  */
 function findBracketCost(country, method, totalWeightKg) {
   if (!shippingRates[country] || !shippingRates[country][method]) {
@@ -240,21 +242,21 @@ function findBracketCost(country, method, totalWeightKg) {
   }
   const costMap = shippingRates[country][method];
 
-  // Build an array of valid weights for which a cost is defined.
+  // Build an array of valid weights (as numbers) for which a cost is defined.
   const validWeights = allowedWeights.filter(w => {
     const wStr = w.toFixed(2);
     return costMap[wStr] && costMap[wStr].cost !== undefined;
   });
 
   if (validWeights.length === 0) return null;
-
-  // The maximum allowed weight is the highest valid weight.
   const maxWeightPossible = validWeights[validWeights.length - 1];
+
+  // Do not round here—we want to block orders that exceed the max by any amount.
   if (totalWeightKg > maxWeightPossible) {
     return null; // Order too heavy for this shipping method.
   }
 
-  // Find the smallest valid weight bracket that is >= totalWeightKg.
+  // Find the smallest valid bracket that is >= totalWeightKg.
   for (let w of validWeights) {
     if (w >= totalWeightKg) {
       return costMap[w.toFixed(2)].cost;
@@ -265,7 +267,6 @@ function findBracketCost(country, method, totalWeightKg) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //   Shipping webhook endpoint (Snipcart v3)
-//   (Changed route to "/shipping_rates" with underscore.)
 // ─────────────────────────────────────────────────────────────────────────────
 app.post("/shipping_rates", (req, res) => {
   try {
@@ -275,45 +276,50 @@ app.post("/shipping_rates", (req, res) => {
     // 1) Check for missing shipping country.
     if (!shippingAddress || !shippingAddress.country) {
       return res.status(200).json({
-        rates: [],
-        errors: [{
-          key: "noCountry",
-          message: "Missing shipping country.",
-          preventCheckout: true
-        }]
+        errors: [
+          {
+            key: "noCountry",
+            message: "Missing shipping country.",
+            preventCheckout: true
+          }
+        ]
       });
     }
 
     const countryCode = shippingAddress.country.toUpperCase();
     if (!shippingRates[countryCode]) {
       return res.status(200).json({
-        rates: [],
-        errors: [{
-          key: "unsupportedCountry",
-          message: "We do not ship to this country.",
-          preventCheckout: true
-        }]
+        errors: [
+          {
+            key: "unsupportedCountry",
+            message: "We do not ship to this country.",
+            preventCheckout: true
+          }
+        ]
       });
     }
 
     // 2) Check that there are items.
     if (!items || items.length === 0) {
       return res.status(200).json({
-        rates: [],
-        errors: [{
-          key: "noItems",
-          message: "No items in the order.",
-          preventCheckout: true
-        }]
+        errors: [
+          {
+            key: "noItems",
+            message: "No items in the order.",
+            preventCheckout: true
+          }
+        ]
       });
     }
 
     // 3) Sum up item weights (in kg), factoring in quantity.
-    const totalWeightKg = items.reduce((sum, item) => {
+    let totalWeightKg = items.reduce((sum, item) => {
       const w = parseFloat(item.weight) || 0;
       const qty = parseFloat(item.quantity) || 1;
       return sum + w * qty;
     }, 0);
+    // Round total weight to 2 decimals.
+    totalWeightKg = Math.round(totalWeightKg * 100) / 100;
     console.log(`Total weight: ${totalWeightKg} kg`);
 
     const userCurrency = (currency || "").toLowerCase();
@@ -344,29 +350,31 @@ app.post("/shipping_rates", (req, res) => {
       });
     }
 
-    // 6) If no shipping methods are available, return an error response.
+    // 6) If no shipping methods are available, return an error response WITHOUT a "rates" field.
     if (rates.length === 0) {
       return res.status(200).json({
-        rates: [],
-        errors: [{
-          key: "noMethodsOrOverweight",
-          message: "No shipping method can handle that weight for this destination.",
-          preventCheckout: true
-        }]
+        errors: [
+          {
+            key: "overweight",
+            message: "No shipping method can handle that weight for this destination.",
+            preventCheckout: true
+          }
+        ]
       });
     }
 
     // 7) Otherwise, return the shipping rates.
     return res.status(200).json({ rates });
   } catch (e) {
-    console.error("Error in shippingrates endpoint:", e);
+    console.error("Error in shipping_rates endpoint:", e);
     return res.status(200).json({
-      rates: [],
-      errors: [{
-        key: "serverError",
-        message: "A server error occurred: " + e.message,
-        preventCheckout: true
-      }]
+      errors: [
+        {
+          key: "serverError",
+          message: "A server error occurred: " + e.message,
+          preventCheckout: true
+        }
+      ]
     });
   }
 });
