@@ -14,9 +14,11 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 }
 allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
-// ─────────────────────────────────────────────────────────────
-// :: All shipping cost arrays
-// ─────────────────────────────────────────────────────────────
+//
+// ─────────────────────────────────────────────────────────────────────────────
+//   :: All shipping cost arrays
+// ─────────────────────────────────────────────────────────────────────────────
+//
 
 // Taiwan (TW)
 const TW_fast = [
@@ -215,6 +217,28 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
 
 //
 // ─────────────────────────────────────────────────────────────────────────────
+//   Log maximum allowed weight for each country and each shipping method.
+// ─────────────────────────────────────────────────────────────────────────────
+//
+for (const country in shippingRates) {
+  for (const method in shippingRates[country]) {
+    const costMap = shippingRates[country][method];
+    // Filter allowedWeights for those with a defined cost.
+    const validWeights = allowedWeights.filter(w => {
+      const key = w.toFixed(2);
+      return costMap[key] && costMap[key].cost !== undefined;
+    });
+    if (validWeights.length > 0) {
+      const maxWeight = validWeights[validWeights.length - 1];
+      console.log(`Max allowed weight for ${country} ${method} shipping is ${maxWeight} kg`);
+    } else {
+      console.log(`No valid weight brackets for ${country} ${method} shipping.`);
+    }
+  }
+}
+
+//
+// ─────────────────────────────────────────────────────────────────────────────
 //   Currency conversion rates (TWD base)
 // ─────────────────────────────────────────────────────────────────────────────
 //
@@ -230,8 +254,8 @@ const conversionRates = {
 };
 
 /**
- * Given a (country, method) and a totalWeightKg, returns the cost for the first
- * allowed bracket that is greater than or equal to totalWeightKg.
+ * Given a (country, method) and a totalWeightKg, this function returns the cost for the
+ * first allowed bracket that is greater than or equal to totalWeightKg.
  * Returns null if totalWeightKg exceeds the maximum allowed weight for that method.
  */
 function findBracketCost(country, method, totalWeightKg) {
@@ -242,8 +266,8 @@ function findBracketCost(country, method, totalWeightKg) {
 
   // Build an array of valid weights for which a cost is defined.
   const validWeights = allowedWeights.filter(w => {
-    const wStr = w.toFixed(2);
-    return costMap[wStr] && costMap[wStr].cost !== undefined;
+    const key = w.toFixed(2);
+    return costMap[key] && costMap[key].cost !== undefined;
   });
 
   if (validWeights.length === 0) return null;
@@ -273,6 +297,7 @@ app.post("/shipping-rates", (req, res) => {
     // 1) Check for missing shipping country.
     if (!shippingAddress || !shippingAddress.country) {
       return res.status(200).json({
+        rates: [],
         errors: [
           {
             key: "noCountry",
@@ -286,6 +311,7 @@ app.post("/shipping-rates", (req, res) => {
     const countryCode = shippingAddress.country.toUpperCase();
     if (!shippingRates[countryCode]) {
       return res.status(200).json({
+        rates: [],
         errors: [
           {
             key: "unsupportedCountry",
@@ -346,12 +372,12 @@ app.post("/shipping-rates", (req, res) => {
       });
     }
 
-    // 6) If no shipping methods are available, return an error response with ONLY an "errors" field.
+    // 6) If no shipping methods are available, return an error response with only an "errors" field.
     if (rates.length === 0) {
       return res.status(200).json({
         errors: [
           {
-            key: "overweight",
+            key: "noMethodsOrOverweight",
             message: "No shipping method can handle that weight for this destination.",
             preventCheckout: true
           }
