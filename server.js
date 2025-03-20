@@ -15,9 +15,9 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
 //
-// ─────────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //   :: All shipping cost arrays
-// ─────────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //
 
 // Taiwan (TW)
@@ -178,10 +178,13 @@ const GB_slow = [
   7165
 ];
 
-// shippingRates dictionary
+//
+// ─────────────────────────────────────────────────────────────────────────────
+//   :: Build the shippingRates dictionary
+// ─────────────────────────────────────────────────────────────────────────────
+//
 let shippingRates = {};
 
-// Populate shippingRates with bracketed cost data
 for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
   shippingRates[country] = {};
   for (const method of ["fast", "slow"]) {
@@ -204,16 +207,19 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
     } else if (country === "GB") {
       costArray = method === "fast" ? GB_fast : GB_slow;
     }
-
     allowedWeights.forEach((w, i) => {
       shippingRates[country][method][w.toFixed(2)] = {
-        cost: costArray[i] // undefined if i >= costArray.length
+        cost: costArray[i] // If i >= costArray.length, cost is undefined.
       };
     });
   }
 }
 
-// Currency conversion dictionary
+//
+// ─────────────────────────────────────────────────────────────────────────────
+//   :: Currency conversion rates (from TWD)
+// ─────────────────────────────────────────────────────────────────────────────
+//
 const conversionRates = {
   "twd": 1,
   "hkd": 0.25,
@@ -226,8 +232,9 @@ const conversionRates = {
 };
 
 /**
- * Given a (country, method), returns the cost for the bracket that covers totalWeightKg,
- * or null if overweight for that method.
+ * Given a (country, method) and a totalWeightKg, this function returns the cost for the first
+ * allowed bracket that is >= totalWeightKg. If the total weight exceeds the highest bracket for
+ * that method, it returns null.
  */
 function findBracketCost(country, method, totalWeightKg) {
   if (!shippingRates[country] || !shippingRates[country][method]) {
@@ -235,7 +242,7 @@ function findBracketCost(country, method, totalWeightKg) {
   }
   const costMap = shippingRates[country][method];
 
-  // Find the highest bracket we have cost for
+  // Determine the highest bracket index that has a defined cost.
   let highestValidIndex = -1;
   for (let i = 0; i < allowedWeights.length; i++) {
     const wStr = allowedWeights[i].toFixed(2);
@@ -244,38 +251,36 @@ function findBracketCost(country, method, totalWeightKg) {
     }
   }
   if (highestValidIndex < 0) {
-    return null; // no cost data at all
+    return null;
   }
-
   const maxWeightPossible = allowedWeights[highestValidIndex];
   if (totalWeightKg > maxWeightPossible) {
-    return null; // overweight for this method
+    return null; // Overweight for this method.
   }
 
-  // Find bracket covering totalWeightKg
+  // Find the bracket that covers totalWeightKg.
   for (let i = 0; i < allowedWeights.length; i++) {
     const wVal = allowedWeights[i];
     const wStr = wVal.toFixed(2);
     if (!costMap[wStr] || costMap[wStr].cost === undefined) {
-      // skip undefined
       continue;
     }
     if (wVal >= totalWeightKg) {
-      return costMap[wStr].cost; 
+      return costMap[wStr].cost;
     }
   }
-
-  return null; // fallback
+  return null;
 }
 
 // Shipping webhook (Snipcart v3)
-const router = express.Router();
-router.post("/shippingrates", (req, res) => {
+app.post("/shippingrates", (req, res) => {
   console.log("Request body:", JSON.stringify(req.body, null, 2));
   const { currency, items, shippingAddress } = req.body.content || req.body;
 
+  // 1) Check for missing shipping country.
   if (!shippingAddress || !shippingAddress.country) {
     return res.status(200).json({
+      rates: [],
       errors: [
         {
           key: "noCountry",
@@ -289,6 +294,7 @@ router.post("/shippingrates", (req, res) => {
   const countryCode = shippingAddress.country.toUpperCase();
   if (!shippingRates[countryCode]) {
     return res.status(200).json({
+      rates: [],
       errors: [
         {
           key: "unsupportedCountry",
@@ -299,7 +305,7 @@ router.post("/shippingrates", (req, res) => {
     });
   }
 
-  // sum up item weight
+  // 2) Sum up item weights (in kg), factoring in quantity.
   const totalWeightKg = items.reduce((sum, item) => {
     const w = item.weight || 0;
     const qty = item.quantity || 1;
@@ -313,31 +319,32 @@ router.post("/shippingrates", (req, res) => {
 
   let rates = [];
 
-  // Try fast
+  // 3) Try fast shipping.
   const fastCostRaw = findBracketCost(countryCode, "fast", totalWeightKg);
   if (fastCostRaw !== null) {
-    const costNum = fastCostRaw * convRate;
+    const costConverted = (fastCostRaw * convRate).toFixed(2);
     rates.push({
-      cost: costNum.toFixed(2),
+      cost: costConverted,
       description: "Fast Shipping",
       delay: { minimum: 2, maximum: 5 }
     });
   }
 
-  // Try slow
+  // 4) Try slow shipping.
   const slowCostRaw = findBracketCost(countryCode, "slow", totalWeightKg);
   if (slowCostRaw !== null) {
-    const costNum = slowCostRaw * convRate;
+    const costConverted = (slowCostRaw * convRate).toFixed(2);
     rates.push({
-      cost: costNum.toFixed(2),
+      cost: costConverted,
       description: "Slow Shipping",
       delay: { minimum: 7, maximum: 14 }
     });
   }
 
-  // If no shipping methods => block
+  // 5) If no shipping methods are available, return an error.
   if (rates.length === 0) {
     return res.status(200).json({
+      rates: [],
       errors: [
         {
           key: "noMethodsOrOverweight",
@@ -348,15 +355,16 @@ router.post("/shippingrates", (req, res) => {
     });
   }
 
-  // Otherwise success
-  return res.json({ rates });
+  // 6) Otherwise, return the shipping rates.
+  return res.status(200).json({ rates });
 });
-app.use("/", router);
 
-// Basic root
+// Root route
 app.get("/", (req, res) => {
   res.send("Shipping webhook is live!");
 });
 
-app.listen(PORT, () => console.log(`Shipping webhook running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`Shipping webhook running on port ${PORT}`)
+);
 
