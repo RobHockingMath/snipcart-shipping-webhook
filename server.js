@@ -14,11 +14,9 @@ for (let w = 1.0; w <= 30; w += 0.5) {
 }
 allowedWeights.sort((a, b) => a - b); // Now has 61 values
 
-//
 // ─────────────────────────────────────────────────────────────────────────────
 //   :: All shipping cost arrays
 // ─────────────────────────────────────────────────────────────────────────────
-//
 
 // Taiwan (TW)
 const TW_fast = [
@@ -234,8 +232,7 @@ const conversionRates = {
 /**
  * Given a (country, method) and a totalWeightKg, this function returns the cost for the
  * first allowed bracket (from the cost array) that is greater than or equal to totalWeightKg.
- * If totalWeightKg exceeds the maximum weight (i.e. the highest bracket for which a cost is defined),
- * it returns null.
+ * If totalWeightKg exceeds the maximum weight for which a cost is defined, it returns null.
  */
 function findBracketCost(country, method, totalWeightKg) {
   if (!shippingRates[country] || !shippingRates[country][method]) {
@@ -243,7 +240,7 @@ function findBracketCost(country, method, totalWeightKg) {
   }
   const costMap = shippingRates[country][method];
 
-  // Build an array of valid weights (as numbers) for which a cost is defined.
+  // Build an array of valid weights for which a cost is defined.
   const validWeights = allowedWeights.filter(w => {
     const wStr = w.toFixed(2);
     return costMap[wStr] && costMap[wStr].cost !== undefined;
@@ -268,8 +265,9 @@ function findBracketCost(country, method, totalWeightKg) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //   Shipping webhook endpoint (Snipcart v3)
+//   (Changed route to "/shipping_rates" with underscore.)
 // ─────────────────────────────────────────────────────────────────────────────
-app.post("/shippingrates", (req, res) => {
+app.post("/shipping_rates", (req, res) => {
   try {
     console.log("Request body:", JSON.stringify(req.body, null, 2));
     const { currency, items, shippingAddress } = req.body.content || req.body;
@@ -278,27 +276,11 @@ app.post("/shippingrates", (req, res) => {
     if (!shippingAddress || !shippingAddress.country) {
       return res.status(200).json({
         rates: [],
-        errors: [
-          {
-            key: "noCountry",
-            message: "Missing shipping country.",
-            preventCheckout: true
-          }
-        ]
-      });
-    }
-
-    // 1a) Check that there are items.
-    if (!items || items.length === 0) {
-      return res.status(200).json({
-        rates: [],
-        errors: [
-          {
-            key: "noItems",
-            message: "No items in the order.",
-            preventCheckout: true
-          }
-        ]
+        errors: [{
+          key: "noCountry",
+          message: "Missing shipping country.",
+          preventCheckout: true
+        }]
       });
     }
 
@@ -306,17 +288,27 @@ app.post("/shippingrates", (req, res) => {
     if (!shippingRates[countryCode]) {
       return res.status(200).json({
         rates: [],
-        errors: [
-          {
-            key: "unsupportedCountry",
-            message: "We do not ship to this country.",
-            preventCheckout: true
-          }
-        ]
+        errors: [{
+          key: "unsupportedCountry",
+          message: "We do not ship to this country.",
+          preventCheckout: true
+        }]
       });
     }
 
-    // 2) Sum up item weights (in kg), factoring in quantity.
+    // 2) Check that there are items.
+    if (!items || items.length === 0) {
+      return res.status(200).json({
+        rates: [],
+        errors: [{
+          key: "noItems",
+          message: "No items in the order.",
+          preventCheckout: true
+        }]
+      });
+    }
+
+    // 3) Sum up item weights (in kg), factoring in quantity.
     const totalWeightKg = items.reduce((sum, item) => {
       const w = parseFloat(item.weight) || 0;
       const qty = parseFloat(item.quantity) || 1;
@@ -330,7 +322,7 @@ app.post("/shippingrates", (req, res) => {
 
     let rates = [];
 
-    // 3) Try fast shipping.
+    // 4) Try fast shipping.
     const fastCostRaw = findBracketCost(countryCode, "fast", totalWeightKg);
     if (fastCostRaw !== null) {
       const costConverted = (fastCostRaw * convRate).toFixed(2);
@@ -341,7 +333,7 @@ app.post("/shippingrates", (req, res) => {
       });
     }
 
-    // 4) Try slow shipping.
+    // 5) Try slow shipping.
     const slowCostRaw = findBracketCost(countryCode, "slow", totalWeightKg);
     if (slowCostRaw !== null) {
       const costConverted = (slowCostRaw * convRate).toFixed(2);
@@ -352,33 +344,29 @@ app.post("/shippingrates", (req, res) => {
       });
     }
 
-    // 5) If no shipping methods are available, return an error response.
+    // 6) If no shipping methods are available, return an error response.
     if (rates.length === 0) {
       return res.status(200).json({
         rates: [],
-        errors: [
-          {
-            key: "noMethodsOrOverweight",
-            message: "No shipping method can handle that weight for this destination.",
-            preventCheckout: true
-          }
-        ]
+        errors: [{
+          key: "noMethodsOrOverweight",
+          message: "No shipping method can handle that weight for this destination.",
+          preventCheckout: true
+        }]
       });
     }
 
-    // 6) Otherwise, return the shipping rates.
+    // 7) Otherwise, return the shipping rates.
     return res.status(200).json({ rates });
   } catch (e) {
     console.error("Error in shippingrates endpoint:", e);
     return res.status(200).json({
       rates: [],
-      errors: [
-        {
-          key: "serverError",
-          message: "A server error occurred: " + e.message,
-          preventCheckout: true
-        }
-      ]
+      errors: [{
+        key: "serverError",
+        message: "A server error occurred: " + e.message,
+        preventCheckout: true
+      }]
     });
   }
 });
