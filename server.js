@@ -308,8 +308,7 @@ app.post("/shipping-rates", (req, res) => {
         errors: [
           {
             key: "noCountry",
-            message: "Missing shipping country.",
-            preventCheckout: true
+            message: "Missing shipping country."
           }
         ]
       });
@@ -322,8 +321,7 @@ app.post("/shipping-rates", (req, res) => {
         errors: [
           {
             key: "unsupportedCountry",
-            message: "We do not ship to this country.",
-            preventCheckout: true
+            message: "We do not ship to this country."
           }
         ]
       });
@@ -335,8 +333,7 @@ app.post("/shipping-rates", (req, res) => {
         errors: [
           {
             key: "noItems",
-            message: "No items in the order.",
-            preventCheckout: true
+            message: "No items in the order."
           }
         ]
       });
@@ -385,8 +382,7 @@ app.post("/shipping-rates", (req, res) => {
         errors: [
           {
             key: "noMethodsOrOverweight",
-            message: "No shipping method can handle that weight for this destination.",
-            preventCheckout: true
+            message: "No shipping method can handle that weight for this destination."
           }
         ]
       });
@@ -400,8 +396,7 @@ app.post("/shipping-rates", (req, res) => {
       errors: [
         {
           key: "serverError",
-          message: "A server error occurred: " + e.message,
-          preventCheckout: true
+          message: "A server error occurred: " + e.message
         }
       ]
     });
@@ -418,3 +413,4 @@ app.get("/", (req, res) => {
 app.listen(PORT, () =>
   console.log(`Shipping webhook running on port ${PORT}`)
 );
+
