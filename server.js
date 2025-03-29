@@ -260,6 +260,7 @@ const conversionRates = {
  */
 function findBracketCost(country, method, totalWeightKg) {
   if (!shippingRates[country] || !shippingRates[country][method]) {
+    console.log(`Invalid country or method: ${country}, ${method}`);
     return null;
   }
   const costMap = shippingRates[country][method];
@@ -273,16 +274,22 @@ function findBracketCost(country, method, totalWeightKg) {
   if (validWeights.length === 0) return null;
   const maxWeightPossible = validWeights[validWeights.length - 1];
 
+  // Debug: log total weight and max allowed weight.
+  console.log(`DEBUG: Total weight: ${totalWeightKg} kg, Max allowed for ${country} ${method} shipping: ${maxWeightPossible} kg`);
+
   if (totalWeightKg > maxWeightPossible) {
+    console.log(`DEBUG: Order weight (${totalWeightKg} kg) exceeds maximum allowed (${maxWeightPossible} kg).`);
     return null; // Order too heavy for this shipping method.
   }
 
   // Find the smallest valid bracket that is >= totalWeightKg.
   for (let w of validWeights) {
     if (w >= totalWeightKg) {
+      console.log(`DEBUG: Found bracket: ${w} kg with cost ${costMap[w.toFixed(2)].cost}`);
       return costMap[w.toFixed(2)].cost;
     }
   }
+  console.log(`DEBUG: No valid bracket found for weight ${totalWeightKg} kg.`);
   return null;
 }
 
