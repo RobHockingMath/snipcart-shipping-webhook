@@ -180,7 +180,7 @@ const GB_slow = [
 
 //
 // ─────────────────────────────────────────────────────────────────────────────
-//   Build the shippingRates dictionary
+//   Build the shippingRates dictionary with delay times included.
 // ─────────────────────────────────────────────────────────────────────────────
 //
 let shippingRates = {};
@@ -207,9 +207,28 @@ for (const country of ["TW", "HK", "SG", "KR", "JP", "US", "CA", "GB"]) {
     } else if (country === "GB") {
       costArray = method === "fast" ? GB_fast : GB_slow;
     }
+    // For each allowed weight, assign the cost and the delay values (using your actual times)
     allowedWeights.forEach((w, i) => {
       shippingRates[country][method][w.toFixed(2)] = {
-        cost: costArray[i] // cost is undefined if i >= costArray.length.
+        cost: costArray[i],
+        delay: (country === "TW"
+          ? { min: method === "fast" ? 1 : 3, max: method === "fast" ? 1 : 3 }
+          : country === "HK"
+          ? { min: method === "fast" ? 1 : 7, max: method === "fast" ? 2 : 10 }
+          : country === "SG"
+          ? { min: method === "fast" ? 2 : 8, max: method === "fast" ? 3 : 10 }
+          : country === "KR"
+          ? { min: method === "fast" ? 2 : 7, max: method === "fast" ? 3 : 10 }
+          : country === "JP"
+          ? { min: method === "fast" ? 2 : 7, max: method === "fast" ? 3 : 10 }
+          : country === "US"
+          ? { min: method === "fast" ? 4 : 10, max: method === "fast" ? 5 : 14 }
+          : country === "CA"
+          ? { min: method === "fast" ? 4 : 14, max: method === "fast" ? 5 : 18 }
+          : country === "GB"
+          ? { min: method === "fast" ? 4 : 13, max: method === "fast" ? 5 : 16 }
+          : { min: 0, max: 0 }
+        )
       };
     });
   }
@@ -264,24 +283,19 @@ function findBracketCost(country, method, totalWeightKg) {
     return null;
   }
   const costMap = shippingRates[country][method];
-
   // Build an array of valid weights for which a cost is defined.
   const validWeights = allowedWeights.filter(w => {
     const key = w.toFixed(2);
     return costMap[key] && costMap[key].cost !== undefined;
   });
-
   if (validWeights.length === 0) return null;
   const maxWeightPossible = validWeights[validWeights.length - 1];
-
   // Debug: log total weight and max allowed weight.
   console.log(`DEBUG: Total weight: ${totalWeightKg} kg, Max allowed for ${country} ${method} shipping: ${maxWeightPossible} kg`);
-
   if (totalWeightKg > maxWeightPossible) {
     console.log(`DEBUG: Order weight (${totalWeightKg} kg) exceeds maximum allowed (${maxWeightPossible} kg).`);
     return null; // Order too heavy for this shipping method.
   }
-
   // Find the smallest valid bracket that is >= totalWeightKg.
   for (let w of validWeights) {
     if (w >= totalWeightKg) {
@@ -300,7 +314,6 @@ app.post("/shipping-rates", (req, res) => {
   try {
     console.log("Request body:", JSON.stringify(req.body, null, 2));
     const { currency, items, shippingAddress } = req.body.content || req.body;
-
     // 1) Check for missing shipping country.
     if (!shippingAddress || !shippingAddress.country) {
       return res.status(200).json({
@@ -313,7 +326,6 @@ app.post("/shipping-rates", (req, res) => {
         ]
       });
     }
-
     const countryCode = shippingAddress.country.toUpperCase();
     if (!shippingRates[countryCode]) {
       return res.status(200).json({
@@ -326,7 +338,6 @@ app.post("/shipping-rates", (req, res) => {
         ]
       });
     }
-
     // 2) Check that there are items.
     if (!items || items.length === 0) {
       return res.status(200).json({
@@ -338,7 +349,6 @@ app.post("/shipping-rates", (req, res) => {
         ]
       });
     }
-
     // 3) Sum up item weights (in kg), factoring in quantity.
     let totalWeightKg = items.reduce((sum, item) => {
       const w = parseFloat(item.weight) || 0;
@@ -347,36 +357,36 @@ app.post("/shipping-rates", (req, res) => {
     }, 0);
     totalWeightKg = Math.round(totalWeightKg * 100) / 100;
     console.log(`Total weight: ${totalWeightKg} kg`);
-
     const userCurrency = (currency || "").toLowerCase();
     const convRate = conversionRates[userCurrency] || 1;
     console.log(`Snipcart currency: ${currency}, convRate: ${convRate}`);
-
     let rates = [];
-
     // 4) Try fast shipping.
     const fastCostRaw = findBracketCost(countryCode, "fast", totalWeightKg);
     if (fastCostRaw !== null) {
-      const costConverted = (fastCostRaw * convRate).toFixed(2);
+      const costConverted = parseFloat((fastCostRaw * convRate).toFixed(2));
       rates.push({
         cost: costConverted,
         description: "Fast Shipping",
-        delay: { minimum: 2, maximum: 5 }
+        guaranteedDaysToDelivery: shippingRates[countryCode]["fast"][allowedWeights[allowedWeights.length - 1].toFixed(2)].delay.max,
+        userDefinedId: "fast_shipping_" + countryCode,
+        // You can include the delay details for your debugging if needed:
+        delay: shippingRates[countryCode]["fast"][allowedWeights[allowedWeights.length - 1].toFixed(2)].delay
       });
     }
-
     // 5) Try slow shipping.
     const slowCostRaw = findBracketCost(countryCode, "slow", totalWeightKg);
     if (slowCostRaw !== null) {
-      const costConverted = (slowCostRaw * convRate).toFixed(2);
+      const costConverted = parseFloat((slowCostRaw * convRate).toFixed(2));
       rates.push({
         cost: costConverted,
         description: "Slow Shipping",
-        delay: { minimum: 7, maximum: 14 }
+        guaranteedDaysToDelivery: shippingRates[countryCode]["slow"][allowedWeights[allowedWeights.length - 1].toFixed(2)].delay.max,
+        userDefinedId: "slow_shipping_" + countryCode,
+        delay: shippingRates[countryCode]["slow"][allowedWeights[allowedWeights.length - 1].toFixed(2)].delay
       });
     }
-
-    // 6) If no shipping methods are available, return an error response with only an "errors" field.
+    // 6) If no shipping methods are available, return an error response.
     if (rates.length === 0) {
       return res.status(200).json({
         errors: [
@@ -387,7 +397,6 @@ app.post("/shipping-rates", (req, res) => {
         ]
       });
     }
-
     // 7) Otherwise, return the shipping rates.
     return res.status(200).json({ rates });
   } catch (e) {
