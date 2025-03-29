@@ -318,7 +318,7 @@ function findBracketCost(country, method, totalWeightKg) {
 // ─────────────────────────────────────────────────────────────────────────────
 //   Shipping webhook endpoint (Snipcart v3)
 // ─────────────────────────────────────────────────────────────────────────────
-app.post("/shipping-rates", (req, res) => {
+app.post("/shippingrates", (req, res) => {
   try {
     console.log("Request body:", JSON.stringify(req.body, null, 2));
     const raw = req.body.content || req.body;
